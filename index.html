@@ -27,6 +27,7 @@
             const [savedRoutines, setSavedRoutines] = useState([]);
             const [currentRoutineName, setCurrentRoutineName] = useState('');
             const [arrivalTime, setArrivalTime] = useState('');
+            const [draggedItem, setDraggedItem] = useState(null);
             const [activities, setActivities] = useState([
                 { id: 1, name: 'Travel time', minutes: '', enabled: true, isTravel: true },
                 { id: 2, name: 'Breakfast', minutes: '', enabled: false },
@@ -84,21 +85,38 @@
             const updateActivity = (id, field, value) => setActivities(activities.map(act => act.id === id ? { ...act, [field]: value } : act));
             const deleteActivity = (id) => setActivities(activities.filter(act => act.id !== id));
             
+            const handleDragStart = (e, index) => {
+                setDraggedItem(index);
+                e.dataTransfer.effectAllowed = 'move';
+            };
+            
+            const handleDragOver = (e, index) => {
+                e.preventDefault();
+                if (draggedItem === null || draggedItem === index) return;
+                
+                const newActivities = [...activities];
+                const draggedActivity = newActivities[draggedItem];
+                newActivities.splice(draggedItem, 1);
+                newActivities.splice(index, 0, draggedActivity);
+                
+                setActivities(newActivities);
+                setDraggedItem(index);
+            };
+            
+            const handleDragEnd = () => {
+                setDraggedItem(null);
+                // Auto-recalculate timeline if it exists
+                if (timeline.length > 0 && arrivalTime) {
+                    setTimeout(() => calculateTimeline(), 100);
+                }
+            };
+            
             const calculateTimeline = () => {
                 if (!arrivalTime) return;
                 const [hours, minutes] = arrivalTime.split(':').map(Number);
                 let currentMinutes = hours * 60 + minutes;
                 const enabledActivities = activities.filter(act => act.enabled && act.minutes).reverse();
                 const newTimeline = [];
-                
-                // Add arrival time as the end time
-                newTimeline.push({ 
-                    name: 'Arrival time', 
-                    startTime: formatTime(currentMinutes),
-                    endTime: formatTime(currentMinutes),
-                    minutes: 0,
-                    isArrival: true
-                });
 
                 enabledActivities.forEach(activity => {
                     const actMinutes = parseInt(activity.minutes) || 0;
@@ -113,7 +131,17 @@
                     });
                 });
                 
-                setTimeline(newTimeline);
+                // Add arrival time as the last item
+                newTimeline.push({ 
+                    name: 'Arrival time', 
+                    startTime: formatTime(hours * 60 + minutes),
+                    endTime: formatTime(hours * 60 + minutes),
+                    minutes: 0,
+                    isArrival: true
+                });
+                
+                // Reverse to show chronological order (snoozing first, arrival last)
+                setTimeline(newTimeline.reverse());
                 setStartTime(formatTime(currentMinutes));
             };
             
@@ -155,10 +183,18 @@
                         
                         <div className="space-y-3 mb-6">
                             <h2 className="text-lg font-semibold text-gray-800">Activities (in order before arrival)</h2>
-                            <p className="text-xs text-gray-600">Check the activities you need and enter how many minutes each takes</p>
+                            <p className="text-xs text-gray-600">✋ Drag to reorder • ✓ Check to enable • Enter minutes for each</p>
                             
-                            {activities.map((activity) => (
-                                <div key={activity.id} className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg">
+                            {activities.map((activity, index) => (
+                                <div 
+                                    key={activity.id} 
+                                    draggable="true"
+                                    onDragStart={(e) => handleDragStart(e, index)}
+                                    onDragOver={(e) => handleDragOver(e, index)}
+                                    onDragEnd={handleDragEnd}
+                                    className={`flex items-center gap-3 bg-gray-50 p-3 rounded-lg cursor-move hover:bg-gray-100 transition-colors border-2 ${draggedItem === index ? 'border-indigo-400 opacity-50' : 'border-transparent'}`}
+                                >
+                                    <div className="text-gray-400 text-xl cursor-grab active:cursor-grabbing">☰</div>
                                     <input 
                                         type="checkbox" 
                                         checked={activity.enabled} 
