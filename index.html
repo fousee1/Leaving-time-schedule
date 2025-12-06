@@ -115,15 +115,19 @@
                 if (!arrivalTime) return;
                 const [hours, minutes] = arrivalTime.split(':').map(Number);
                 let currentMinutes = hours * 60 + minutes;
-                const enabledActivities = activities.filter(act => act.enabled && act.minutes).reverse();
-                const newTimeline = [];
-
-                enabledActivities.forEach(activity => {
+                
+                // Get enabled activities in the order they appear in the list
+                const enabledActivities = activities.filter(act => act.enabled && act.minutes);
+                
+                // Work backwards from arrival time
+                const timelineReverse = [];
+                
+                enabledActivities.reverse().forEach(activity => {
                     const actMinutes = parseInt(activity.minutes) || 0;
                     const endMinutes = currentMinutes;
                     currentMinutes -= actMinutes;
                     
-                    newTimeline.push({ 
+                    timelineReverse.push({ 
                         name: activity.name, 
                         startTime: formatTime(currentMinutes),
                         endTime: formatTime(endMinutes),
@@ -131,7 +135,10 @@
                     });
                 });
                 
-                // Add arrival time as the last item
+                // Reverse the timeline so earliest time is at top
+                const newTimeline = timelineReverse.reverse();
+                
+                // Add arrival time at the end
                 newTimeline.push({ 
                     name: 'Arrival time', 
                     startTime: formatTime(hours * 60 + minutes),
@@ -140,8 +147,7 @@
                     isArrival: true
                 });
                 
-                // Reverse to show chronological order (snoozing first, arrival last)
-                setTimeline(newTimeline.reverse());
+                setTimeline(newTimeline);
                 setStartTime(formatTime(currentMinutes));
             };
             
@@ -181,9 +187,9 @@
                             <input type="time" value={arrivalTime} onChange={(e) => setArrivalTime(e.target.value)} className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-lg focus:border-indigo-500 focus:outline-none" />
                         </div>
                         
-                        <div className="space-y-3 mb-6">
+                        <div className="space-y-2 mb-6">
                             <h2 className="text-lg font-semibold text-gray-800">Activities (in order before arrival)</h2>
-                            <p className="text-xs text-gray-600">✋ Drag to reorder • ✓ Check to enable • Enter minutes for each</p>
+                            <p className="text-xs text-gray-600 mb-2">✋ Drag to reorder • ✓ Check to enable • Enter minutes for each</p>
                             
                             {activities.map((activity, index) => (
                                 <div 
@@ -192,21 +198,21 @@
                                     onDragStart={(e) => handleDragStart(e, index)}
                                     onDragOver={(e) => handleDragOver(e, index)}
                                     onDragEnd={handleDragEnd}
-                                    className={`flex items-center gap-3 bg-gray-50 p-3 rounded-lg cursor-move hover:bg-gray-100 transition-colors border-2 ${draggedItem === index ? 'border-indigo-400 opacity-50' : 'border-transparent'}`}
+                                    className={`flex items-center gap-2 bg-gray-50 p-2 rounded-lg cursor-move hover:bg-gray-100 transition-colors border-2 ${draggedItem === index ? 'border-indigo-400 opacity-50' : 'border-transparent'}`}
                                 >
-                                    <div className="text-gray-400 text-xl cursor-grab active:cursor-grabbing">☰</div>
+                                    <div className="text-gray-400 text-lg cursor-grab active:cursor-grabbing">☰</div>
                                     <input 
                                         type="checkbox" 
                                         checked={activity.enabled} 
                                         onChange={(e) => updateActivity(activity.id, 'enabled', e.target.checked)} 
-                                        className="w-5 h-5 text-indigo-600 rounded" 
+                                        className="w-4 h-4 text-indigo-600 rounded" 
                                     />
                                     <input 
                                         type="text" 
                                         value={activity.name} 
                                         onChange={(e) => updateActivity(activity.id, 'name', e.target.value)} 
                                         disabled={!activity.enabled} 
-                                        className="flex-1 px-3 py-2 border border-gray-300 rounded focus:border-indigo-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500" 
+                                        className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-indigo-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500" 
                                     />
                                     <input 
                                         type="number" 
@@ -214,10 +220,10 @@
                                         onChange={(e) => updateActivity(activity.id, 'minutes', e.target.value)} 
                                         disabled={!activity.enabled} 
                                         placeholder="min" 
-                                        className="w-20 px-3 py-2 border border-gray-300 rounded focus:border-indigo-500 focus:outline-none disabled:bg-gray-100" 
+                                        className="w-16 px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-indigo-500 focus:outline-none disabled:bg-gray-100" 
                                     />
                                     {activity.custom && (
-                                        <button onClick={() => deleteActivity(activity.id)} className="p-2 text-red-500 hover:bg-red-50 rounded text-xl">🗑️</button>
+                                        <button onClick={() => deleteActivity(activity.id)} className="p-1 text-red-500 hover:bg-red-50 rounded text-lg">🗑️</button>
                                     )}
                                 </div>
                             ))}
@@ -236,38 +242,38 @@
                                 </div>
                                 
                                 <div className="border-2 border-gray-200 rounded-xl p-4 bg-white">
-                                    <h3 className="font-semibold text-gray-800 mb-4 text-center text-lg">Your Complete Schedule</h3>
-                                    <p className="text-xs text-gray-600 text-center mb-4">Each activity shows when to start and finish</p>
+                                    <h3 className="font-semibold text-gray-800 mb-2 text-center text-lg">Your Complete Schedule</h3>
+                                    <p className="text-xs text-gray-600 text-center mb-3">Each activity shows when to start and finish</p>
                                     
-                                    <div className="space-y-3">
+                                    <div className="space-y-2">
                                         {timeline.map((item, i) => (
-                                            <div key={i} className={`p-4 rounded-lg border-2 ${item.isArrival ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
-                                                <div className="flex items-center justify-between mb-2">
-                                                    <span className="font-bold text-gray-800 text-lg">{item.name}</span>
+                                            <div key={i} className={`p-3 rounded-lg border-2 ${item.isArrival ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="font-bold text-gray-800">{item.name}</span>
                                                     {item.minutes > 0 && (
-                                                        <span className="text-sm bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full font-semibold">
+                                                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold">
                                                             {item.minutes} min
                                                         </span>
                                                     )}
                                                 </div>
                                                 
                                                 {!item.isArrival && (
-                                                    <div className="flex items-center gap-4 text-sm">
-                                                        <div className="flex items-center gap-2">
+                                                    <div className="flex items-center gap-3 text-xs">
+                                                        <div className="flex items-center gap-1">
                                                             <span className="text-gray-600">Start:</span>
-                                                            <span className="font-bold text-green-600 text-base">{item.startTime}</span>
+                                                            <span className="font-bold text-green-600">{item.startTime}</span>
                                                         </div>
                                                         <div className="text-gray-400">→</div>
-                                                        <div className="flex items-center gap-2">
+                                                        <div className="flex items-center gap-1">
                                                             <span className="text-gray-600">Finish:</span>
-                                                            <span className="font-bold text-red-600 text-base">{item.endTime}</span>
+                                                            <span className="font-bold text-red-600">{item.endTime}</span>
                                                         </div>
                                                     </div>
                                                 )}
                                                 
                                                 {item.isArrival && (
                                                     <div className="text-center">
-                                                        <span className="text-green-700 font-semibold">✓ Target arrival time</span>
+                                                        <span className="text-green-700 font-semibold text-xs">✓ Target arrival time</span>
                                                     </div>
                                                 )}
                                             </div>
