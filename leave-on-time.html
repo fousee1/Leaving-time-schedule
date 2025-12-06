@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leave On Time Calculator</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        window.storage = {
+            async get(key) { try { const value = localStorage.getItem(key); return value ? { key, value } : null; } catch { return null; } },
+            async set(key, value) { try { localStorage.setItem(key, value); return { key, value }; } catch { return null; } },
+            async delete(key) { try { localStorage.removeItem(key); return { key, deleted: true }; } catch { return null; } },
+            async list(prefix) { try { const keys = []; for (let i = 0; i < localStorage.length; i++) { const key = localStorage.key(i); if (key.startsWith(prefix)) keys.push(key); } return { keys, prefix }; } catch { return { keys: [] }; } }
+        };
+        
+        function LeaveOnTimeApp() {
+            const [savedRoutines, setSavedRoutines] = useState([]);
+            const [currentRoutineName, setCurrentRoutineName] = useState('');
+            const [arrivalTime, setArrivalTime] = useState('');
+            const [activities, setActivities] = useState([
+                { id: 1, name: 'Travel time', minutes: '', enabled: true, isTravel: true },
+                { id: 2, name: 'Breakfast', minutes: '', enabled: false },
+                { id: 3, name: 'Coffee', minutes: '', enabled: false },
+                { id: 4, name: 'Shower/dressed', minutes: '', enabled: false },
+                { id: 5, name: 'Exercise', minutes: '', enabled: false },
+                { id: 6, name: 'Bathroom', minutes: '', enabled: false },
+                { id: 7, name: 'Snoozing', minutes: '', enabled: false },
+            ]);
+            const [timeline, setTimeline] = useState([]);
+            const [startTime, setStartTime] = useState(null);
+            const [showSaveDialog, setShowSaveDialog] = useState(false);
+            const [showLoadDialog, setShowLoadDialog] = useState(false);
+            
+            useEffect(() => { loadRoutines(); }, []);
+            
+            const loadRoutines = async () => {
+                try {
+                    const result = await window.storage.list('routine:');
+                    if (result && result.keys) {
+                        const routines = await Promise.all(result.keys.map(async (key) => {
+                            const data = await window.storage.get(key);
+                            return data ? JSON.parse(data.value) : null;
+                        }));
+                        setSavedRoutines(routines.filter(r => r !== null));
+                    }
+                } catch (error) { console.log('No saved routines yet'); }
+            };
+            
+            const saveRoutine = async () => {
+                if (!currentRoutineName.trim()) { alert('Please enter a name'); return; }
+                const routine = { name: currentRoutineName, arrivalTime, activities, savedAt: new Date().toISOString() };
+                try {
+                    await window.storage.set(`routine:${currentRoutineName}`, JSON.stringify(routine));
+                    await loadRoutines();
+                    setShowSaveDialog(false);
+                    alert('Routine saved successfully!');
+                } catch { alert('Error saving'); }
+            };
+            
+            const loadRoutine = (routine) => {
+                setCurrentRoutineName(routine.name);
+                setArrivalTime(routine.arrivalTime);
+                setActivities(routine.activities);
+                setShowLoadDialog(false);
+            };
+            
+            const deleteRoutine = async (routineName) => {
+                if (confirm(`Delete "${routineName}"?`)) {
+                    try { await window.storage.delete(`routine:${routineName}`); await loadRoutines(); } catch { alert('Error deleting'); }
+                }
+            };
+            
+            const addCustomActivity = () => setActivities([...activities, { id: Date.now(), name: 'Custom activity', minutes: '', enabled: true, custom: true }]);
+            const updateActivity = (id, field, value) => setActivities(activities.map(act => act.id === id ? { ...act, [field]: value } : act));
+            const deleteActivity = (id) => setActivities(activities.filter(act => act.id !== id));
+            
+            const calculateTimeline = () => {
+                if (!arrivalTime) return;
+                const [hours, minutes] = arrivalTime.split(':').map(Number);
+                let currentMinutes = hours * 60 + minutes;
+                const enabledActivities = activities.filter(act => act.enabled && act.minutes).reverse();
+                const newTimeline = [];
+                
+                // Add arrival time as the end time
+                newTimeline.push({ 
+                    name: 'Arrival time', 
+                    startTime: formatTime(currentMinutes),
+                    endTime: formatTime(currentMinutes),
+                    minutes: 0,
+                    isArrival: true
+                });
+
+                enabledActivities.forEach(activity => {
+                    const actMinutes = parseInt(activity.minutes) || 0;
+                    const endMinutes = currentMinutes;
+                    currentMinutes -= actMinutes;
+                    
+                    newTimeline.push({ 
+                        name: activity.name, 
+                        startTime: formatTime(currentMinutes),
+                        endTime: formatTime(endMinutes),
+                        minutes: actMinutes 
+                    });
+                });
+                
+                setTimeline(newTimeline);
+                setStartTime(formatTime(currentMinutes));
+            };
+            
+            const formatTime = (totalMinutes) => {
+                let mins = totalMinutes;
+                while (mins < 0) mins += 1440;
+                while (mins >= 1440) mins -= 1440;
+                const hours = Math.floor(mins / 60), minutes = mins % 60;
+                const period = hours >= 12 ? 'PM' : 'AM';
+                const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+                return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+            };
+            
+            const getCurrentTime = () => {
+                const now = new Date(), hours = now.getHours(), minutes = now.getMinutes();
+                const period = hours >= 12 ? 'PM' : 'AM';
+                const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+                return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+            };
+            
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 pb-20">
+                    <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-6 mt-8">
+                        <div className="flex items-center justify-between mb-6">
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-800">⏰ Leave On Time</h1>
+                                {currentRoutineName && <p className="text-sm text-gray-600">{currentRoutineName}</p>}
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => setShowLoadDialog(true)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-semibold">📂 Load</button>
+                                <button onClick={() => setShowSaveDialog(true)} className="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 rounded-lg text-sm font-semibold">💾 Save</button>
+                            </div>
+                        </div>
+                        
+                        <div className="mb-6">
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">What time do you need to arrive?</label>
+                            <input type="time" value={arrivalTime} onChange={(e) => setArrivalTime(e.target.value)} className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-lg focus:border-indigo-500 focus:outline-none" />
+                        </div>
+                        
+                        <div className="space-y-3 mb-6">
+                            <h2 className="text-lg font-semibold text-gray-800">Activities (in order before arrival)</h2>
+                            <p className="text-xs text-gray-600">Check the activities you need and enter how many minutes each takes</p>
+                            
+                            {activities.map((activity) => (
+                                <div key={activity.id} className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={activity.enabled} 
+                                        onChange={(e) => updateActivity(activity.id, 'enabled', e.target.checked)} 
+                                        className="w-5 h-5 text-indigo-600 rounded" 
+                                    />
+                                    <input 
+                                        type="text" 
+                                        value={activity.name} 
+                                        onChange={(e) => updateActivity(activity.id, 'name', e.target.value)} 
+                                        disabled={!activity.enabled} 
+                                        className="flex-1 px-3 py-2 border border-gray-300 rounded focus:border-indigo-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500" 
+                                    />
+                                    <input 
+                                        type="number" 
+                                        value={activity.minutes} 
+                                        onChange={(e) => updateActivity(activity.id, 'minutes', e.target.value)} 
+                                        disabled={!activity.enabled} 
+                                        placeholder="min" 
+                                        className="w-20 px-3 py-2 border border-gray-300 rounded focus:border-indigo-500 focus:outline-none disabled:bg-gray-100" 
+                                    />
+                                    {activity.custom && (
+                                        <button onClick={() => deleteActivity(activity.id)} className="p-2 text-red-500 hover:bg-red-50 rounded text-xl">🗑️</button>
+                                    )}
+                                </div>
+                            ))}
+                            
+                            <button onClick={addCustomActivity} className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-indigo-400 hover:text-indigo-600 font-semibold">➕ Add Custom Activity</button>
+                        </div>
+                        
+                        <button onClick={calculateTimeline} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-lg mb-6 transition-colors">Calculate My Schedule</button>
+                        
+                        {timeline.length > 0 && (
+                            <div>
+                                <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-indigo-300 p-6 rounded-xl mb-6">
+                                    <h2 className="text-center text-lg font-semibold text-gray-800 mb-2">🎯 You need to start at:</h2>
+                                    <p className="text-5xl font-bold text-center text-indigo-600 mb-3">{startTime}</p>
+                                    <p className="text-center text-gray-600 text-sm">Current time: <span className="font-semibold">{getCurrentTime()}</span></p>
+                                </div>
+                                
+                                <div className="border-2 border-gray-200 rounded-xl p-4 bg-white">
+                                    <h3 className="font-semibold text-gray-800 mb-4 text-center text-lg">Your Complete Schedule</h3>
+                                    <p className="text-xs text-gray-600 text-center mb-4">Each activity shows when to start and finish</p>
+                                    
+                                    <div className="space-y-3">
+                                        {timeline.map((item, i) => (
+                                            <div key={i} className={`p-4 rounded-lg border-2 ${item.isArrival ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="font-bold text-gray-800 text-lg">{item.name}</span>
+                                                    {item.minutes > 0 && (
+                                                        <span className="text-sm bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full font-semibold">
+                                                            {item.minutes} min
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                
+                                                {!item.isArrival && (
+                                                    <div className="flex items-center gap-4 text-sm">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-gray-600">Start:</span>
+                                                            <span className="font-bold text-green-600 text-base">{item.startTime}</span>
+                                                        </div>
+                                                        <div className="text-gray-400">→</div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-gray-600">Finish:</span>
+                                                            <span className="font-bold text-red-600 text-base">{item.endTime}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                
+                                                {item.isArrival && (
+                                                    <div className="text-center">
+                                                        <span className="text-green-700 font-semibold">✓ Target arrival time</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    
+                    {showSaveDialog && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                            <div className="bg-white rounded-xl p-6 max-w-md w-full">
+                                <h2 className="text-xl font-bold text-gray-800 mb-4">Save Routine</h2>
+                                <input 
+                                    type="text" 
+                                    value={currentRoutineName} 
+                                    onChange={(e) => setCurrentRoutineName(e.target.value)} 
+                                    placeholder="e.g., Work Morning, Gym Day, Doctor Visit" 
+                                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg mb-4 focus:border-indigo-500 focus:outline-none" 
+                                />
+                                <div className="flex gap-3">
+                                    <button onClick={() => setShowSaveDialog(false)} className="flex-1 py-3 bg-gray-200 hover:bg-gray-300 rounded-lg font-semibold">Cancel</button>
+                                    <button onClick={saveRoutine} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold">Save</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {showLoadDialog && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                            <div className="bg-white rounded-xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
+                                <h2 className="text-xl font-bold text-gray-800 mb-4">Load Routine</h2>
+                                {savedRoutines.length === 0 ? (
+                                    <p className="text-center py-8 text-gray-600">No saved routines yet</p>
+                                ) : (
+                                    <div className="space-y-2 mb-4">
+                                        {savedRoutines.map((r, i) => (
+                                            <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100">
+                                                <button onClick={() => loadRoutine(r)} className="flex-1 text-left">
+                                                    <div className="font-semibold text-gray-800">{r.name}</div>
+                                                    <div className="text-sm text-gray-600">Arrival: {r.arrivalTime || 'Not set'}</div>
+                                                </button>
+                                                <button onClick={() => deleteRoutine(r.name)} className="p-2 text-red-500 hover:bg-red-50 rounded text-xl">🗑️</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                <button onClick={() => setShowLoadDialog(false)} className="w-full py-3 bg-gray-200 hover:bg-gray-300 rounded-lg font-semibold">Close</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        ReactDOM.render(<LeaveOnTimeApp />, document.getElementById('root'));
+    </script>
+</body>
+</html>
